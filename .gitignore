@@ -17,6 +17,13 @@ __pycache__/
 data/raw/
 ml/artifacts/
 
+# метрики эксперимента с плагинами (локальное, не для репо)
+metrics/
+
+# playwright-артефакты локальных проверок
+.playwright-mcp/
+frontend/.playwright-mcp/
+
 # ide
 .idea/
 .vscode/
