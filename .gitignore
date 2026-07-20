@@ -1,0 +1,22 @@
+CLAUDE.md
+.claude
+.venv
+plugins-registry.md
+sidequest-tz.md
+
+# окружение и секреты
+.env
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# данные и артефакты моделей (в репо только demo-набор)
+data/raw/
+ml/artifacts/
+
+# ide
+.idea/
+.vscode/
