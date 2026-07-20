@@ -12,3 +12,9 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
+
+[tool.ruff.lint.per-file-ignores]
+# Depends в дефолтах — базовая идиома FastAPI
+"backend/app/routers/*" = ["B008"]
+# автогенерированные миграции не переносим вручную
+"backend/migrations/versions/*" = ["E501"]
