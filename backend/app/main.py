@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 
 from app.config import settings
 from app.db import ping_db, ping_redis
-from app.routers import admin, games, recommendations, users
+from app.routers import admin, games, metrics, recommendations, users
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,6 +19,7 @@ app.include_router(users.router)
 app.include_router(games.router)
 app.include_router(recommendations.router)
 app.include_router(admin.router)
+app.include_router(metrics.router)
 
 
 @app.middleware("http")

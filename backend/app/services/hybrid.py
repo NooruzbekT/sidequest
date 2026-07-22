@@ -50,11 +50,12 @@ def get_artifact(path: str, expected_version: str | None = None) -> HybridArtifa
         raise ServingError(f"артефакт гибридной модели недоступен: {e}") from e
 
     key = (path, mtime)
-    if key not in _cache:
+    artifact = _cache.get(key)
+    if artifact is None:
+        # локальная загрузка до записи: конкурентный clear() не приводит к KeyError
+        artifact = HybridArtifact.load(path)
         _cache.clear()
-        _cache[key] = HybridArtifact.load(path)
-
-    artifact = _cache[key]
+        _cache[key] = artifact
     if expected_version is not None and artifact.version != expected_version:
         raise ServingError(
             f"версия артефакта ({artifact.version}) не совпадает с активной "

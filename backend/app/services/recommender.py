@@ -1,14 +1,17 @@
 """Оркестратор выдачи: активная модель + fallback.
 
 Активная модель hybrid → скоринг по артефакту (item-item похожесть + популярность).
-Артефакт недоступен/повреждён или модель неизвестна → fallback: популярностный
-baseline с теми же фильтрами; в ответе честно указывается фактически отработавшая
-версия модели.
+Артефакт недоступен/повреждён, скоринг превысил таймаут или модель неизвестна →
+fallback: популярностный baseline с теми же фильтрами; в ответе честно указывается
+фактически отработавшая версия. Известное ограничение: при таймауте поток скоринга
+дорабатывает вхолостую (asyncio.to_thread не прерывается).
 """
 
+import asyncio
 import logging
+import time
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -83,6 +86,8 @@ def _recommend_hybrid(
     expected_version: str,
 ) -> list[tuple[Game, float, str]]:
     artifact = hybrid.get_artifact(settings.artifact_path, expected_version=expected_version)
+    if settings.model_delay_seconds > 0:
+        time.sleep(settings.model_delay_seconds)
     blocked = {t.lower() for t in (user.blocked_tags or [])}
     candidates = [
         g for g in games if g.id not in interacted and _passes_filters(g, user.max_price, blocked)
@@ -148,11 +153,16 @@ async def recommend_for_user(
     served_model = model
     if model.name == "hybrid":
         try:
-            scored = _recommend_hybrid(
-                games, interacted, liked, liked_titles, user, model.version
+            # скоринг синхронный — уводим в поток и ограничиваем таймаутом (инцидент №4)
+            scored = await asyncio.wait_for(
+                asyncio.to_thread(
+                    _recommend_hybrid, games, interacted, liked, liked_titles, user,
+                    model.version,
+                ),
+                timeout=settings.model_timeout_seconds,
             )
-        except ServingError as e:
-            logger.warning("fallback на baseline: %s", e)
+        except (ServingError, TimeoutError) as e:
+            logger.warning("fallback на baseline: %s", str(e) or type(e).__name__)
             scored = _recommend_baseline(games, interacted, user)
             baseline_model = await _get_model_by_name(session, "baseline")
             if baseline_model is None:
@@ -161,6 +171,8 @@ async def recommend_for_user(
     else:
         scored = _recommend_baseline(games, interacted, user)
 
+    # храним только последнюю выдачу пользователя — таблица не растёт от повторных GET
+    await session.execute(delete(Recommendation).where(Recommendation.user_id == user.id))
     items: list[tuple[Game, int, float, str]] = []
     for rank, (game, score, reason) in enumerate(scored, start=1):
         items.append((game, rank, score, reason))
