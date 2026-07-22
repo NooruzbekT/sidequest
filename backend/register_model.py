@@ -32,9 +32,12 @@ async def main(name: str, version: str) -> None:
         dataset_hash = artifact.get("dataset_kaggle_version")
 
     metrics = {}
-    results_path = ROOT / "ml" / "results" / f"{name}.json"
-    if results_path.exists():
-        metrics = json.loads(results_path.read_text(encoding="utf-8")).get("metrics", {})
+    # метрика served-артефакта честнее метрики полной модели, если она замерена
+    for results_name in (f"{name}-artifact.json", f"{name}.json"):
+        results_path = ROOT / "ml" / "results" / results_name
+        if results_path.exists():
+            metrics = json.loads(results_path.read_text(encoding="utf-8")).get("metrics", {})
+            break
 
     async with session_factory() as session:
         existing = (

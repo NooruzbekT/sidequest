@@ -39,13 +39,28 @@ class HybridArtifact:
             raise ServingError(f"артефакт гибридной модели недоступен: {e}") from e
 
 
-_cache: dict[str, HybridArtifact] = {}
+# ключ — (path, mtime): после retrain работающий сервер подхватит новый файл без рестарта
+_cache: dict[tuple[str, float], HybridArtifact] = {}
 
 
-def get_artifact(path: str) -> HybridArtifact:
-    if path not in _cache:
-        _cache[path] = HybridArtifact.load(path)
-    return _cache[path]
+def get_artifact(path: str, expected_version: str | None = None) -> HybridArtifact:
+    try:
+        mtime = Path(path).stat().st_mtime
+    except OSError as e:
+        raise ServingError(f"артефакт гибридной модели недоступен: {e}") from e
+
+    key = (path, mtime)
+    if key not in _cache:
+        _cache.clear()
+        _cache[key] = HybridArtifact.load(path)
+
+    artifact = _cache[key]
+    if expected_version is not None and artifact.version != expected_version:
+        raise ServingError(
+            f"версия артефакта ({artifact.version}) не совпадает с активной "
+            f"моделью ({expected_version})"
+        )
+    return artifact
 
 
 def score_candidates(

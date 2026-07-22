@@ -18,5 +18,5 @@ async def current_model(session: AsyncSession = Depends(get_session)):
 
 @router.post("/retrain", status_code=202)
 async def retrain():
-    # очередь появится на Дне 5; контракт эндпоинта фиксируем сразу
+    # выполнение — фоновой задачей через очередь; здесь фиксируется только контракт
     return {"status": "queued", "detail": "Переобучение будет выполнено фоновой задачей"}

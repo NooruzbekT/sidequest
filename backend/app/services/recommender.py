@@ -62,20 +62,34 @@ async def _load_context(session: AsyncSession, user: User):
         .scalars()
         .all()
     )
-    return games, interacted, liked
+
+    # титулы лайкнутых игр вне пула кандидатов — для объяснений «похожа на X»
+    liked_titles: dict[int, str] = {}
+    missing = set(liked) - {g.id for g in games}
+    if missing:
+        rows = await session.execute(
+            select(Game.id, Game.title).where(Game.id.in_(missing))
+        )
+        liked_titles = dict(rows.all())
+    return games, interacted, liked, liked_titles
 
 
 def _recommend_hybrid(
-    games: list[Game], interacted: set[int], liked: list[int], user: User
+    games: list[Game],
+    interacted: set[int],
+    liked: list[int],
+    liked_titles: dict[int, str],
+    user: User,
+    expected_version: str,
 ) -> list[tuple[Game, float, str]]:
-    artifact = hybrid.get_artifact(settings.model_artifact_path)
+    artifact = hybrid.get_artifact(settings.artifact_path, expected_version=expected_version)
     blocked = {t.lower() for t in (user.blocked_tags or [])}
     candidates = [
         g for g in games if g.id not in interacted and _passes_filters(g, user.max_price, blocked)
     ]
     scored = hybrid.score_candidates(artifact, liked, [g.id for g in candidates])
     by_id = {g.id: g for g in candidates}
-    titles = {g.id: g.title for g in games}
+    titles = {g.id: g.title for g in games} | liked_titles
 
     ranked = sorted(scored.items(), key=lambda kv: (-kv[1][0], kv[0]))[:TOP_N]
     items = []
@@ -129,16 +143,21 @@ def _recommend_baseline(
 async def recommend_for_user(
     session: AsyncSession, user: User, model: ModelVersion
 ) -> tuple[ModelVersion, list[tuple[Game, int, float, str]]]:
-    games, interacted, liked = await _load_context(session, user)
+    games, interacted, liked, liked_titles = await _load_context(session, user)
 
     served_model = model
     if model.name == "hybrid":
         try:
-            scored = _recommend_hybrid(games, interacted, liked, user)
+            scored = _recommend_hybrid(
+                games, interacted, liked, liked_titles, user, model.version
+            )
         except ServingError as e:
             logger.warning("fallback на baseline: %s", e)
             scored = _recommend_baseline(games, interacted, user)
-            served_model = await _get_model_by_name(session, "baseline") or model
+            baseline_model = await _get_model_by_name(session, "baseline")
+            if baseline_model is None:
+                logger.error("ModelVersion 'baseline' отсутствует — provenance будет неточным")
+            served_model = baseline_model or model
     else:
         scored = _recommend_baseline(games, interacted, user)
 
