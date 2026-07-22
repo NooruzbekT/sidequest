@@ -15,6 +15,7 @@ __pycache__/
 
 # данные и артефакты моделей (в репо только demo-набор)
 data/raw/
+data/processed/
 ml/artifacts/
 
 # метрики эксперимента с плагинами (локальное, не для репо)
@@ -22,7 +23,6 @@ metrics/
 
 # playwright-артефакты локальных проверок
 .playwright-mcp/
-frontend/.playwright-mcp/
 
 # ide
 .idea/
