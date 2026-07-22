@@ -10,7 +10,7 @@ target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=settings.database_url,
+        url=settings.dsn,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -21,7 +21,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     # миграции гоняем синхронным engine: psycopg работает в обоих режимах
-    engine = create_engine(settings.database_url, poolclass=pool.NullPool)
+    engine = create_engine(settings.dsn, poolclass=pool.NullPool)
     with engine.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
