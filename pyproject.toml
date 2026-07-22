@@ -1,6 +1,10 @@
 [tool.pytest.ini_options]
 pythonpath = ["backend", "ml"]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "integration: тесты с реальной БД (docker compose или сервисы CI)",
+]
 
 [tool.ruff]
 line-length = 100
