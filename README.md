@@ -8,8 +8,10 @@
 (popularity baseline, content-based, collaborative), offline-evaluation с временным сплитом,
 fallback при сбое модели, фоновое переобучение и метрики.
 
-> Статус: **День 4 из 6** — три подхода сравнены (7 моделей в таблице), гибрид в serving
-> с персональными объяснениями и fallback на baseline, feedback-цикл замкнут.
+![ci](https://github.com/NooruzbekT/sidequest/actions/workflows/ci.yml/badge.svg)
+
+> Статус: **День 5 из 6** — фоновые импорт и переобучение (RQ worker) с promotion gate,
+> fallback при сбое/таймауте модели, `/metrics`, 30 тестов (включая интеграционные), CI.
 
 ## Архитектура
 
@@ -78,9 +80,16 @@ python ml/download_data.py   # скачает в data/raw и создаст mani
 ```bash
 git clone <repo-url> sidequest && cd sidequest
 docker compose up --build
-# API: http://localhost:8000, Swagger: http://localhost:8000/docs
-curl http://localhost:8000/health
+# UI: http://localhost:5173, API: http://localhost:8000 (Swagger: /docs)
+
+# миграции и demo-данные (первый запуск)
+pip install -r backend/requirements.txt
+cd backend && alembic upgrade head && python import_demo.py && cd ..
 ```
+
+Compose поднимает пять сервисов: db (Postgres 17, наружу 127.0.0.1:5433), redis, backend
+(FastAPI), worker (RQ — фоновые импорт и переобучение), frontend (nginx со статикой
+и прокси `/api`). Для локальной разработки фронта остаётся `cd frontend && npm run dev`.
 
 `.env` не обязателен (в compose есть значения по умолчанию); шаблон — [.env.example](.env.example).
 
@@ -101,13 +110,28 @@ python ml/eda.py
 
 ## API
 
-Будет доступно в Swagger (`/docs`). Реализовано на текущий момент:
+Документация — в Swagger (`/docs`). Основные endpoint'ы:
 
 | Метод | Путь | Описание |
 |---|---|---|
 | GET | `/health` | статус приложения и зависимостей (db, redis) |
+| GET | `/metrics` | живая статистика: запросы, ошибки, latency, распределение моделей, активная версия |
+| POST | `/users` | создать пользователя |
+| GET | `/users/demo` | готовые demo-профили |
+| POST | `/users/{id}/preferences` | жанры, максимальная цена, стоп-теги (минимум один) |
+| GET | `/games?query=` | поиск игр по названию |
+| POST | `/users/{id}/interactions` | лайк/дизлайк/«уже играл»; идемпотентен (повтор → `duplicate: true`) |
+| GET | `/users/{id}/recommendations` | топ-10 с объяснениями и фактической версией модели |
+| GET | `/admin/models/current` | активная версия модели с метриками |
+| POST | `/admin/retrain` | фоновое переобучение (RQ) с promotion gate; `?simulate_degraded=true` — инцидент №6 |
+| POST | `/admin/import` | фоновый импорт demo-данных |
+| GET | `/admin/jobs/{id}` | статус фоновой задачи |
 
-Полный набор endpoint'ов (users, preferences, interactions, recommendations, admin) — Дни 2–5.
+Надёжность: повторный feedback не создаёт дубликат; при недоступном/повреждённом артефакте
+или таймауте модели — fallback на популярностный baseline с теми же фильтрами (фактическая
+модель честно указана в ответе); переобучение активирует новую версию **только если она
+бьёт baseline по P@10** (promotion gate), деградировавшая модель отклоняется. Логи содержат
+request ID, user id, версию модели и длительность.
 
 ## Метрики моделей
 
