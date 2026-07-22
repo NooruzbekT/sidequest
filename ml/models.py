@@ -305,7 +305,7 @@ class ArtifactHybridModel:
     """
 
     name: str = "hybrid-artifact"
-    artifact_path: str = "ml/artifacts/hybrid_v2.json"
+    artifact_path: str = "ml/artifacts/hybrid_current.json"
     _pop: dict[int, float] = field(default=None, repr=False)
     _neighbors: dict[int, dict[int, float]] = field(default=None, repr=False)
     _game_ids: np.ndarray = field(default=None, repr=False)

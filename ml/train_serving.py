@@ -1,14 +1,13 @@
 """Обучение serving-артефакта гибридной модели.
 
-Считает по train-сплиту item-item соседей (top-N по косинусу со-встречаемости лайков)
-и decay-popularity, пишет ml/artifacts/hybrid_v2.json. Регистрация версии в БД —
-backend/register_model.py (переключение serving на новую версию).
+`build_artifact()` переиспользуется фоновой задачей переобучения (backend worker).
+Файл артефакта один — hybrid_current.json, версия записана внутри; переключение
+версий выполняет backend/register_model.py или promotion gate в задаче retrain.
 """
 
 import json
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from models import DecayPopularityModel, ItemItemModel
@@ -19,18 +18,18 @@ ARTIFACTS_DIR = ROOT / "ml" / "artifacts"
 
 VERSION = "v2"
 TOP_NEIGHBORS = 20
+WEIGHTS = {"similarity": 0.6, "popularity": 0.4}
 
 
-def main() -> None:
-    games = pd.read_csv(DATA_DIR / "games.csv")
-    train = pd.read_csv(DATA_DIR / "train.csv")
-    manifest = json.loads((DATA_DIR / "split_manifest.json").read_text(encoding="utf-8"))
-
+def build_artifact(
+    games: pd.DataFrame, train: pd.DataFrame, version: str, split_params: dict
+) -> dict:
     item_item = ItemItemModel().fit(games, train)
     decay = DecayPopularityModel().fit(games, train)
 
     game_ids = item_item._game_ids
     sim = item_item._sim
+    sim.eliminate_zeros()
     neighbors: dict[str, list[list[float]]] = {}
     for i, gid in enumerate(game_ids):
         row = sim[i].tocoo()
@@ -45,26 +44,40 @@ def main() -> None:
         str(int(gid)): round(1 - rank / len(ranked), 6) for rank, gid in enumerate(ranked)
     }
 
-    artifact = {
+    return {
         "model": "hybrid",
-        "version": VERSION,
+        "version": version,
         "params": {
             "top_neighbors": TOP_NEIGHBORS,
             "decay_half_life_days": decay.half_life_days,
-            "weights": {"similarity": 0.6, "popularity": 0.4},
+            "weights": WEIGHTS,
         },
-        "split": manifest["params"],
-        "dataset_kaggle_version": manifest["source_kaggle_version"],
+        "split": split_params,
         "popularity": popularity,
         "neighbors": neighbors,
     }
 
+
+def main() -> None:
+    games = pd.read_csv(DATA_DIR / "games.csv")
+    train = pd.read_csv(DATA_DIR / "train.csv")
+    manifest = json.loads((DATA_DIR / "split_manifest.json").read_text(encoding="utf-8"))
+
+    artifact = build_artifact(
+        games,
+        train,
+        VERSION,
+        manifest["params"] | {"dataset_kaggle_version": manifest["source_kaggle_version"]},
+    )
+    artifact["dataset_kaggle_version"] = manifest["source_kaggle_version"]
+
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    out = ARTIFACTS_DIR / f"hybrid_{VERSION}.json"
-    out.write_text(json.dumps(artifact, ensure_ascii=False), encoding="utf-8")
-    size_mb = out.stat().st_size / 1e6
-    print(f"artifact -> {out} ({size_mb:.1f} MB, {len(neighbors)} games with neighbors)")
-    assert np.isfinite(size_mb)
+    out = ARTIFACTS_DIR / "hybrid_current.json"
+    tmp = out.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(artifact, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(out)
+    print(f"artifact -> {out} ({out.stat().st_size / 1e6:.1f} MB, "
+          f"{len(artifact['neighbors'])} games with neighbors, version {VERSION})")
 
 
 if __name__ == "__main__":

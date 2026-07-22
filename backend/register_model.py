@@ -24,10 +24,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 async def main(name: str, version: str) -> None:
-    artifact_path = ROOT / "ml" / "artifacts" / f"{name}_{version}.json"
     params, dataset_hash = {}, None
+    artifact_path = ROOT / "ml" / "artifacts" / f"{name}_current.json"
     if artifact_path.exists():
         artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+        if artifact.get("version") != version:
+            raise SystemExit(
+                f"в артефакте версия {artifact.get('version')}, а регистрируется {version} — "
+                "сначала пересоберите артефакт"
+            )
         params = artifact.get("params", {})
         dataset_hash = artifact.get("dataset_kaggle_version")
 
