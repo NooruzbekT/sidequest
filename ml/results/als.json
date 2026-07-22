@@ -1,21 +1,21 @@
 {
-  "model": "popularity",
-  "fit_seconds": 0.03,
+  "model": "als",
+  "fit_seconds": 2.28,
   "eval_users": 2000,
   "eval_seed": 42,
   "top_k": 10,
   "metrics": {
-    "precision_at_10": 0.0075,
-    "recall_at_10": 0.0274,
-    "coverage": 0.0046,
-    "diversity": 0.8909,
-    "latency_ms_mean": 0.0,
-    "latency_ms_p95": 0.0,
+    "precision_at_10": 0.0134,
+    "recall_at_10": 0.0452,
+    "coverage": 0.069,
+    "diversity": 0.8587,
+    "latency_ms_mean": 0.26,
+    "latency_ms_p95": 0.47,
     "empty_recs_share": 0.0
   },
   "precision_at_10_by_slice": {
-    "1-2_likes": 0.0,
-    "3+_likes": 0.0076
+    "1-2_likes": 0.025,
+    "3+_likes": 0.0133
   },
   "split": {
     "seed": 42,

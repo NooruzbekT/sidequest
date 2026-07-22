@@ -13,7 +13,15 @@ import numpy as np
 import pandas as pd
 
 from metrics import catalog_coverage, intra_list_diversity, precision_at_k, recall_at_k
-from models import ContentBasedModel, PopularityModel
+from models import (
+    ALSModel,
+    ContentBasedModel,
+    DecayPopularityModel,
+    HybridModel,
+    ItemItemModel,
+    PopularityModel,
+    RandomModel,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data" / "processed"
@@ -24,12 +32,23 @@ TOP_K = 10
 EVAL_USERS = 2000
 
 
-def evaluate(model, games, train, test_pos_by_user, train_by_user, eval_users, div_model):
+def slice_of(n_likes: int) -> str:
+    if n_likes == 0:
+        return "0_likes"
+    if n_likes <= 2:
+        return "1-2_likes"
+    return "3+_likes"
+
+
+def evaluate(
+    model, games, train, test_pos_by_user, train_by_user, eval_users, div_model, likes_by_user
+):
     t0 = time.perf_counter()
     model.fit(games, train)
     fit_seconds = time.perf_counter() - t0
 
     precisions, recalls, diversities, latencies = [], [], [], []
+    slice_precisions: dict[str, list[float]] = {}
     all_recommended: set[int] = set()
     n_empty = 0
 
@@ -41,7 +60,9 @@ def evaluate(model, games, train, test_pos_by_user, train_by_user, eval_users, d
 
         # повторный отзыв на ту же игру исключён из выдачи — не считаем его недостижимым хитом
         relevant = test_pos_by_user[user_id] - exclude
-        precisions.append(precision_at_k(recs, relevant, TOP_K))
+        p = precision_at_k(recs, relevant, TOP_K)
+        precisions.append(p)
+        slice_precisions.setdefault(slice_of(likes_by_user.get(user_id, 0)), []).append(p)
         recalls.append(recall_at_k(recs, relevant, TOP_K))
         if recs:
             diversities.append(intra_list_diversity(div_model.item_vectors(recs)))
@@ -65,6 +86,9 @@ def evaluate(model, games, train, test_pos_by_user, train_by_user, eval_users, d
             "latency_ms_p95": round(float(np.percentile(lat_ms, 95)), 2),
             "empty_recs_share": round(n_empty / len(eval_users), 4),
         },
+        "precision_at_10_by_slice": {
+            k: round(float(np.mean(v)), 4) for k, v in sorted(slice_precisions.items())
+        },
     }
 
 
@@ -81,6 +105,7 @@ def main() -> None:
     test_pos = test[test["is_recommended"]]
     test_pos_by_user = test_pos.groupby("user_id")["app_id"].agg(set).to_dict()
     train_by_user = train.groupby("user_id")["app_id"].agg(set).to_dict()
+    likes_by_user = train[train["is_recommended"]].groupby("user_id").size().to_dict()
 
     rng = np.random.default_rng(SEED)
     candidates = sorted(test_pos_by_user)
@@ -91,9 +116,19 @@ def main() -> None:
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     rows = []
-    for model in (PopularityModel(), ContentBasedModel()):
+    models = (
+        RandomModel(),
+        PopularityModel(),
+        DecayPopularityModel(),
+        ContentBasedModel(),
+        ItemItemModel(),
+        ALSModel(),
+        HybridModel(),
+    )
+    for model in models:
         result = evaluate(
-            model, games, train, test_pos_by_user, train_by_user, eval_users, div_model
+            model, games, train, test_pos_by_user, train_by_user, eval_users, div_model,
+            likes_by_user,
         )
         result["split"] = manifest["params"] | {
             "dataset": manifest["source_dataset"],
