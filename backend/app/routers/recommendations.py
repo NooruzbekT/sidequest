@@ -21,11 +21,11 @@ async def get_recommendations(user_id: uuid.UUID, session: AsyncSession = Depend
     if model is None:
         raise HTTPException(status_code=503, detail="Нет активной модели — выполните импорт данных")
 
-    items = await recommend_for_user(session, user, model)
+    served_model, items = await recommend_for_user(session, user, model)
     return RecommendationsOut(
         user_id=user.id,
-        model_name=model.name,
-        model_version=model.version,
+        model_name=served_model.name,
+        model_version=served_model.version,
         items=[
             RecommendationItem(
                 game=GameOut.model_validate(game), rank=rank, score=score, reason=reason

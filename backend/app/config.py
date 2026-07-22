@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     postgres_port: int = 5433
 
     redis_url: str = "redis://localhost:6379/0"
-    app_version: str = "0.1.0"
+    model_artifact_path: str = "ml/artifacts/hybrid_v2.json"
+    app_version: str = "0.2.0"
 
     @property
     def dsn(self) -> str:

@@ -35,6 +35,9 @@ services:
       POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
       REDIS_URL: redis://redis:6379/0
+      MODEL_ARTIFACT_PATH: /srv/artifacts/hybrid_v2.json
+    volumes:
+      - ./ml/artifacts:/srv/artifacts:ro
     ports:
       - "8000:8000"
     depends_on:
