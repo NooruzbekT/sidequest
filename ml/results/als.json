@@ -1,6 +1,6 @@
 {
   "model": "als",
-  "fit_seconds": 2.28,
+  "fit_seconds": 2.33,
   "eval_users": 2000,
   "eval_seed": 42,
   "top_k": 10,
@@ -9,13 +9,19 @@
     "recall_at_10": 0.0452,
     "coverage": 0.069,
     "diversity": 0.8587,
-    "latency_ms_mean": 0.26,
-    "latency_ms_p95": 0.47,
+    "latency_ms_mean": 0.22,
+    "latency_ms_p95": 0.38,
     "empty_recs_share": 0.0
   },
   "precision_at_10_by_slice": {
-    "1-2_likes": 0.025,
-    "3+_likes": 0.0133
+    "1-2_likes": {
+      "p_at_10": 0.025,
+      "n_users": 24
+    },
+    "3+_likes": {
+      "p_at_10": 0.0133,
+      "n_users": 1976
+    }
   },
   "split": {
     "seed": 42,

@@ -3,11 +3,13 @@
 Все модели обучаются строго на train-данных (агрегаты каталога содержат отзывы
 тестового периода — утечка). Popularity — счётчики по train; content-based — TF-IDF
 по тегам и описанию; item-item — косинус со-встречаемости лайков; ALS — матричная
-факторизация implicit; hybrid — reciprocal rank fusion поверх остальных.
+факторизация implicit; hybrid — взвешенная смесь item-item и decay-популярности;
+hybrid-artifact — тот же гибрид, но по усечённому serving-артефакту.
 """
 
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import implicit
 import numpy as np
@@ -18,7 +20,6 @@ from sklearn.preprocessing import normalize
 
 TAG_WEIGHT = 3  # теги информативнее свободного текста описания
 DECAY_HALF_LIFE_DAYS = 180
-RRF_K = 60  # стандартная константа reciprocal rank fusion
 
 
 @dataclass
@@ -290,6 +291,56 @@ class HybridModel:
             if gid in exclude:
                 continue
             score = self.w_sim * sims.get(gid, 0.0) + self.w_pop * self._pop_norm.get(gid, 0.0)
+            fused.append((-score, gid))
+        fused.sort()
+        return [gid for _, gid in fused[:n]]
+
+
+@dataclass
+class ArtifactHybridModel:
+    """Гибрид, считающий по serving-артефакту (top-20 усечённые соседи).
+
+    Метрика этой модели описывает то, что реально отвечает пользователям,
+    в отличие от HybridModel с полной матрицей похожестей.
+    """
+
+    name: str = "hybrid-artifact"
+    artifact_path: str = "ml/artifacts/hybrid_v2.json"
+    _pop: dict[int, float] = field(default=None, repr=False)
+    _neighbors: dict[int, dict[int, float]] = field(default=None, repr=False)
+    _game_ids: np.ndarray = field(default=None, repr=False)
+    _user_likes: dict[int, list[int]] = field(default=None, repr=False)
+    _w_sim: float = field(default=0.6, repr=False)
+    _w_pop: float = field(default=0.4, repr=False)
+
+    def fit(self, games: pd.DataFrame, train: pd.DataFrame) -> "ArtifactHybridModel":
+        root = Path(__file__).resolve().parents[1]
+        raw = json.loads((root / self.artifact_path).read_text(encoding="utf-8"))
+        self._w_sim = raw["params"]["weights"]["similarity"]
+        self._w_pop = raw["params"]["weights"]["popularity"]
+        self._pop = {int(k): float(v) for k, v in raw["popularity"].items()}
+        self._neighbors = {
+            int(k): {int(g): float(s) for g, s in pairs} for k, pairs in raw["neighbors"].items()
+        }
+        self._game_ids = games["app_id"].to_numpy()
+        liked = train[train["is_recommended"]]
+        self._user_likes = liked.groupby("user_id")["app_id"].agg(list).to_dict()
+        return self
+
+    def recommend(self, user_id: int, n: int, exclude: set[int]) -> list[int]:
+        sims: dict[int, float] = {}
+        for liked in self._user_likes.get(user_id, []):
+            for gid, s in self._neighbors.get(liked, {}).items():
+                sims[gid] = sims.get(gid, 0.0) + s
+        max_sim = max(sims.values()) if sims else 0.0
+
+        fused = []
+        for gid in self._game_ids:
+            gid = int(gid)
+            if gid in exclude:
+                continue
+            sim_norm = sims.get(gid, 0.0) / max_sim if max_sim > 0 else 0.0
+            score = self._w_sim * sim_norm + self._w_pop * self._pop.get(gid, 0.0)
             fused.append((-score, gid))
         fused.sort()
         return [gid for _, gid in fused[:n]]

@@ -9,13 +9,19 @@
     "recall_at_10": 0.0026,
     "coverage": 0.976,
     "diversity": 0.9319,
-    "latency_ms_mean": 0.16,
-    "latency_ms_p95": 0.19,
+    "latency_ms_mean": 0.18,
+    "latency_ms_p95": 0.25,
     "empty_recs_share": 0.0
   },
   "precision_at_10_by_slice": {
-    "1-2_likes": 0.0,
-    "3+_likes": 0.0007
+    "1-2_likes": {
+      "p_at_10": 0.0,
+      "n_users": 24
+    },
+    "3+_likes": {
+      "p_at_10": 0.0007,
+      "n_users": 1976
+    }
   },
   "split": {
     "seed": 42,

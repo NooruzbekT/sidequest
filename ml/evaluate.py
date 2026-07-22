@@ -15,6 +15,7 @@ import pandas as pd
 from metrics import catalog_coverage, intra_list_diversity, precision_at_k, recall_at_k
 from models import (
     ALSModel,
+    ArtifactHybridModel,
     ContentBasedModel,
     DecayPopularityModel,
     HybridModel,
@@ -87,7 +88,8 @@ def evaluate(
             "empty_recs_share": round(n_empty / len(eval_users), 4),
         },
         "precision_at_10_by_slice": {
-            k: round(float(np.mean(v)), 4) for k, v in sorted(slice_precisions.items())
+            k: {"p_at_10": round(float(np.mean(v)), 4), "n_users": len(v)}
+            for k, v in sorted(slice_precisions.items())
         },
     }
 
@@ -111,7 +113,7 @@ def main() -> None:
     candidates = sorted(test_pos_by_user)
     eval_users = list(rng.choice(candidates, size=min(args.users, len(candidates)), replace=False))
 
-    # диверсити считаем в одном признаковом пространстве (TF-IDF) для обеих моделей
+    # диверсити считаем в одном признаковом пространстве (TF-IDF) для всех моделей
     div_model = ContentBasedModel().fit(games, train)
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -124,6 +126,7 @@ def main() -> None:
         ItemItemModel(),
         ALSModel(),
         HybridModel(),
+        ArtifactHybridModel(),
     )
     for model in models:
         result = evaluate(

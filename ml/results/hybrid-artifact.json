@@ -1,16 +1,16 @@
 {
-  "model": "popularity-decay",
-  "fit_seconds": 0.26,
+  "model": "hybrid-artifact",
+  "fit_seconds": 0.9,
   "eval_users": 2000,
   "eval_seed": 42,
   "top_k": 10,
   "metrics": {
-    "precision_at_10": 0.008,
-    "recall_at_10": 0.0302,
-    "coverage": 0.0034,
-    "diversity": 0.894,
-    "latency_ms_mean": 0.0,
-    "latency_ms_p95": 0.0,
+    "precision_at_10": 0.021,
+    "recall_at_10": 0.0747,
+    "coverage": 0.354,
+    "diversity": 0.8125,
+    "latency_ms_mean": 4.14,
+    "latency_ms_p95": 5.43,
     "empty_recs_share": 0.0
   },
   "precision_at_10_by_slice": {
@@ -19,7 +19,7 @@
       "n_users": 24
     },
     "3+_likes": {
-      "p_at_10": 0.008,
+      "p_at_10": 0.0211,
       "n_users": 1976
     }
   },

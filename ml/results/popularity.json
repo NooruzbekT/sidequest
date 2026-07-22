@@ -1,6 +1,6 @@
 {
   "model": "popularity",
-  "fit_seconds": 0.03,
+  "fit_seconds": 0.04,
   "eval_users": 2000,
   "eval_seed": 42,
   "top_k": 10,
@@ -14,8 +14,14 @@
     "empty_recs_share": 0.0
   },
   "precision_at_10_by_slice": {
-    "1-2_likes": 0.0,
-    "3+_likes": 0.0076
+    "1-2_likes": {
+      "p_at_10": 0.0,
+      "n_users": 24
+    },
+    "3+_likes": {
+      "p_at_10": 0.0076,
+      "n_users": 1976
+    }
   },
   "split": {
     "seed": 42,
