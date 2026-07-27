@@ -1,10 +1,5 @@
-CLAUDE.md
-.claude
-.venv
-plugins-registry.md
-sidequest-tz.md
-
 # окружение и секреты
+.venv
 .env
 
 # python
@@ -17,12 +12,6 @@ __pycache__/
 data/raw/
 data/processed/
 ml/artifacts/
-
-# метрики эксперимента с плагинами (локальное, не для репо)
-metrics/
-
-# playwright-артефакты локальных проверок
-.playwright-mcp/
 
 # ide
 .idea/
