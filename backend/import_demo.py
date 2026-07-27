@@ -7,7 +7,6 @@
 import asyncio
 import json
 import sys
-from pathlib import Path
 
 # psycopg async несовместим с ProactorEventLoop (дефолт Windows)
 if sys.platform == "win32":
@@ -17,10 +16,11 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from app.config import settings
 from app.deps import session_factory
 from app.models import Game, Interaction, ModelVersion, User
 
-DEMO_DIR = Path(__file__).resolve().parents[1] / "data" / "demo"
+DEMO_DIR = settings.data_path / "demo"
 
 DEMO_PROFILES = [
     {
@@ -79,12 +79,16 @@ async def ensure_model(session) -> None:
     )
     if existing:
         return
+    metrics = {}
+    results = settings.ml_path / "results" / "popularity.json"
+    if results.exists():
+        metrics = json.loads(results.read_text(encoding="utf-8")).get("metrics", {})
     session.add(
         ModelVersion(
             name="baseline",
             version="v1",
             params={"strategy": "popularity", "score": "positive_ratio*log1p(reviews)"},
-            metrics={},
+            metrics=metrics,
             is_active=True,
         )
     )

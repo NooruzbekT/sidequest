@@ -27,9 +27,10 @@ services:
       timeout: 3s
       retries: 10
 
-  backend:
+  # one-shot: миграции + demo-данные; backend стартует после успешного завершения
+  migrate:
     build: ./backend
-    restart: unless-stopped
+    command: sh -c "alembic upgrade head && python import_demo.py"
     environment: &backend_env
       POSTGRES_USER: ${POSTGRES_USER:-sidequest}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sidequest}
@@ -42,13 +43,24 @@ services:
       ML_DIR: /srv/ml
       DATA_DIR: /srv/data
     volumes:
+      - ./data:/srv/data:ro
+      - ./ml:/srv/ml:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment: *backend_env
+    volumes:
       - ./ml:/srv/ml:ro
       - ./data:/srv/data:ro
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
 
@@ -62,8 +74,8 @@ services:
       - ./ml:/srv/ml
       - ./data:/srv/data:ro
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
 
