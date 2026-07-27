@@ -10,8 +10,13 @@ fallback при сбое модели, фоновое переобучение �
 
 ![ci](https://github.com/NooruzbekT/sidequest/actions/workflows/ci.yml/badge.svg)
 
-> Статус: **День 5 из 6** — фоновые импорт и переобучение (RQ worker) с promotion gate,
-> fallback при сбое/таймауте модели, `/metrics`, 30 тестов (включая интеграционные), CI.
+> Статус: **готов** — приложение поднимается одной командой, три подхода к рекомендациям
+> сравнены честным offline-evaluation, гибрид в serving с fallback, фоновое переобучение
+> с promotion gate, 30 тестов, CI.
+
+| Onboarding | Рекомендации |
+|---|---|
+| ![Onboarding](docs/screenshots/onboarding.png) | ![Рекомендации](docs/screenshots/recommendations.png) |
 
 ## Архитектура
 
@@ -81,15 +86,14 @@ python ml/download_data.py   # скачает в data/raw и создаст mani
 git clone <repo-url> sidequest && cd sidequest
 docker compose up --build
 # UI: http://localhost:5173, API: http://localhost:8000 (Swagger: /docs)
-
-# миграции и demo-данные (первый запуск)
-pip install -r backend/requirements.txt
-cd backend && alembic upgrade head && python import_demo.py && cd ..
 ```
 
-Compose поднимает пять сервисов: db (Postgres 17, наружу 127.0.0.1:5433), redis, backend
-(FastAPI), worker (RQ — фоновые импорт и переобучение), frontend (nginx со статикой
-и прокси `/api`). Для локальной разработки фронта остаётся `cd frontend && npm run dev`.
+Больше ничего не нужно: one-shot сервис `migrate` сам применяет миграции и импортирует
+demo-данные, backend стартует после его успешного завершения. Compose поднимает шесть
+сервисов: db (Postgres 17, наружу 127.0.0.1:5433), redis, migrate, backend (FastAPI),
+worker (RQ — фоновые импорт и переобучение), frontend (nginx со статикой и прокси `/api`).
+Для локальной разработки фронта — `cd frontend && npm run dev`; Python-окружение
+(`pip install -r backend/requirements.txt`) нужно только для ML-скриптов и тестов.
 
 `.env` не обязателен (в compose есть значения по умолчанию); шаблон — [.env.example](.env.example).
 
@@ -127,11 +131,24 @@ python ml/eda.py
 | POST | `/admin/import` | фоновый импорт demo-данных |
 | GET | `/admin/jobs/{id}` | статус фоновой задачи |
 
+Пример: создание пользователя и выдача.
+
+```bash
+curl -X POST http://localhost:8000/users -H "Content-Type: application/json" -d '{"name":"Ана"}'
+# {"id":"1f4e...","name":"Ана","genres":[],"max_price":null,"blocked_tags":[]}
+
+curl http://localhost:8000/users/1f4e.../recommendations
+# {"model_name":"hybrid","model_version":"v5","items":[
+#   {"rank":1,"game":{"title":"Unturned","price":0.0,...},
+#    "reason":"Похожа на «SCP: Secret Laboratory», которая вам понравилась (совпадение вкусов игроков); 91% положительных отзывов"}, ...]}
+```
+
 Надёжность: повторный feedback не создаёт дубликат; при недоступном/повреждённом артефакте
 или таймауте модели — fallback на популярностный baseline с теми же фильтрами (фактическая
 модель честно указана в ответе); переобучение активирует новую версию **только если она
-бьёт baseline по P@10** (promotion gate), деградировавшая модель отклоняется. Логи содержат
-request ID, user id, версию модели и длительность.
+бьёт baseline по P@10** (promotion gate), деградировавшая модель отклоняется — история
+версий с метриками сохраняется в таблице `model_versions`. Логи содержат request ID,
+user id, версию модели и длительность.
 
 ## Метрики моделей
 
@@ -194,9 +211,26 @@ cd backend && python register_model.py --name hybrid --version v2   # перек
 популярностным baseline с теми же фильтрами, фактическая модель честно указывается
 в ответе (`model_name`/`model_version`) и в `/admin/models/current`.
 
+## Проверочные инциденты
+
+Шесть сценариев сбоев с командами воспроизведения, поведением сервиса и восстановлением —
+[docs/incidents.md](docs/incidents.md). Сценарии «модель удалена», «таймаут» и «новая
+модель хуже baseline» проверены при разработке вживую.
+
 ## Ограничения и следующие шаги
 
-- День 1: нет UI, нет БД-схемы, нет моделей — только каркас, данные и здоровье сервиса.
-- План: День 2 — миграции, demo-импорт, onboarding, baseline; День 3 — evaluation +
-  content-based; День 4 — collaborative + feedback; День 5 — фон, fallback, тесты, CI;
-  День 6 — документация, инциденты, видео.
+- Из чистого клона гибрид не активен (обученные артефакты в репо не коммитятся) — выдача
+  честно идёт baseline'ом; включение гибрида: подготовить данные (`ml/download_data.py`,
+  `ml/split.py`), затем `POST /admin/retrain` или `ml/train_serving.py` + `register_model.py`.
+- Метрики считаются на подмножестве датасета (топ-5000 игр, 50k пользователей) — выводы
+  сравнимы между моделями, абсолютные значения занижены positives-only разметкой.
+- ALS не тюнился (дефолтные гиперпараметры, без confidence-весов) — вывод ограничен этой
+  конфигурацией.
+- Конкурентные запросы выдачи одного пользователя могут кратковременно задвоить строки
+  последней выдачи (нет уникального констрейнта) — не влияет на ответ API.
+- Новая игра без отзывов не попадает в item-item соседей (нет со-встречаемости) — путь
+  для неё: content-based по тегам/описанию или популярность внутри жанра; в текущем
+  serving она просто не рекомендуется коллаборативным сигналом.
+- Следующие шаги (ещё два дня): валидационный сплит и тюнинг весов гибрида/ALS;
+  текстовые эмбеддинги описаний (sentence-transformers) как третий сигнал; A/B-механика
+  поверх feedback; Prometheus вместо in-memory метрик.
